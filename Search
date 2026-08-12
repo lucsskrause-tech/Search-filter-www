@@ -1,0 +1,121 @@
+import streamlit as st
+from duckduckgo_search import DDGS
+from datetime import datetime
+
+# ---------- APP-KONFIGURATION ----------
+st.set_page_config(page_title="🌐 Universal Web Search", page_icon="🔍", layout="wide")
+
+st.title("🌐 Universelle Web-Suche & Filter")
+st.caption("Durchsucht das gesamte WWW über DuckDuckGo – ohne API-Key")
+
+# ---------- SIDEBAR: FILTER ----------
+with st.sidebar:
+    st.header("⚙️ Filter")
+    search_type = st.selectbox(
+        "Inhaltstyp",
+        ["Web", "Bilder", "News", "Videos"],
+        help="Wähle, welche Art von Ergebnissen du sehen möchtest."
+    )
+    
+    region = st.selectbox(
+        "Region",
+        ["wt-wt", "de-de", "us-en", "uk-en", "fr-fr", "es-es", "it-it", "jp-jp"],
+        format_func=lambda x: {
+            "wt-wt": "🌍 Weltweit",
+            "de-de": "🇩🇪 Deutschland",
+            "us-en": "🇺🇸 USA",
+            "uk-en": "🇬🇧 Großbritannien",
+            "fr-fr": "🇫🇷 Frankreich",
+            "es-es": "🇪🇸 Spanien",
+            "it-it": "🇮🇹 Italien",
+            "jp-jp": "🇯🇵 Japan"
+        }.get(x, x)
+    )
+    
+    time_filter = st.selectbox(
+        "Zeitraum",
+        ["Jederzeit", "Tag", "Woche", "Monat", "Jahr"],
+        help="Zeigt nur Ergebnisse aus dem gewählten Zeitraum."
+    )
+    
+    max_results = st.slider("Max. Ergebnisse", 5, 30, 15)
+
+# ---------- HAUPTBEREICH: SUCHLEISTE ----------
+query = st.text_input("🔎 Suchbegriff eingeben", placeholder="z.B. Künstliche Intelligenz...")
+
+# Zeitfilter in DuckDuckGo-Parameter umwandeln
+time_map = {
+    "Jederzeit": None,
+    "Tag": "d",
+    "Woche": "w",
+    "Monat": "m",
+    "Jahr": "y"
+}
+
+# ---------- SUCHLOGIK ----------
+if st.button("🚀 Los suchen", type="primary", use_container_width=True):
+    if not query.strip():
+        st.warning("Bitte gib einen Suchbegriff ein.")
+    else:
+        with st.spinner(f"Durchsuche das WWW nach ‚{query}‘ mit Filtern..."):
+            try:
+                ddgs = DDGS()
+                results = []
+                t_limit = time_map[time_filter]
+                reg = region
+
+                # Je nach Typ die passende DDGS-Methode aufrufen
+                if search_type == "Web":
+                    results = list(ddgs.text(query, region=reg, timelimit=t_limit, max_results=max_results))
+                elif search_type == "Bilder":
+                    results = list(ddgs.images(query, region=reg, timelimit=t_limit, max_results=max_results))
+                elif search_type == "News":
+                    results = list(ddgs.news(query, region=reg, timelimit=t_limit, max_results=max_results))
+                elif search_type == "Videos":
+                    results = list(ddgs.videos(query, region=reg, timelimit=t_limit, max_results=max_results))
+
+                # ---------- ERGEBNISSE ANZEIGEN ----------
+                if not results:
+                    st.info("😕 Keine Ergebnisse gefunden. Versuche andere Begriffe oder Filter.")
+                else:
+                    st.success(f"✅ {len(results)} Ergebnisse gefunden")
+                    
+                    # Ergebnisse als Karten darstellen
+                    for item in results:
+                        with st.container(border=True):
+                            if search_type in ["Web", "News"]:
+                                title = item.get('title', 'Ohne Titel')
+                                link = item.get('href', '#')
+                                body = item.get('body', 'Keine Beschreibung')
+                                st.markdown(f"### [{title}]({link})")
+                                st.write(body[:500] + "..." if len(body) > 500 else body)
+                                if search_type == "News" and item.get('date'):
+                                    st.caption(f"📅 {item['date']}")
+                            
+                            elif search_type == "Bilder":
+                                col_img, col_desc = st.columns([1, 2])
+                                with col_img:
+                                    st.image(item.get('image', ''), width=200)
+                                with col_desc:
+                                    st.markdown(f"**{item.get('title', 'Bild')}**")
+                                    if item.get('source'):
+                                        st.caption(f"Quelle: {item['source']}")
+                            
+                            elif search_type == "Videos":
+                                # Direct-Video-URL oder Embed-URL nutzen
+                                video_url = item.get('content') or item.get('embed_url')
+                                if video_url:
+                                    st.video(video_url)
+                                else:
+                                    # Fallback: Zeige den Thumbnail-Link
+                                    st.image(item.get('thumbnail', ''), width=150)
+                                st.markdown(f"**{item.get('title', 'Video')}**")
+                                if item.get('description'):
+                                    st.write(item['description'][:200])
+
+            except Exception as e:
+                st.error(f"🚨 Ein Fehler ist aufgetreten: {e}\n\nTipp: Überprüfe deine Internetverbindung. Bei häufigen Fehlern kann DuckDuckGo kurzfristig blockieren – dann einfach später nochmal versuchen.")
+
+# ---------- FOOTER ----------
+st.divider()
+st.caption("💡 Powered by DuckDuckGo | Die App ruft live Daten ab und filtert sie clientseitig.")
